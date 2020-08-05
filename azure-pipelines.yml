@@ -1,0 +1,154 @@
+trigger:
+- master
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+  location: "'East Us'"
+  storageContainerName: "vhds"
+
+stages:
+- stage: BuildRg
+  displayName: Build RG and VM
+  jobs:
+    - job: Build
+      steps:
+      - task: AzureResourceManagerTemplateDeployment@3
+        inputs:
+          deploymentScope: 'Resource Group'
+          azureResourceManagerConnection: # INSERT YOU SERVICE CONNECTION
+          subscriptionId: # INSERT SUBSCRIPTION ID
+          action: 'Create Or Update Resource Group'
+          resourceGroupName: # INSERT RESOURCEGROUP NAME
+          location: '$(location)'
+          templateLocation: 'Linked artifact'
+          csmFile: 'vm-winrm-windows/azuredeploy.json'
+          csmParametersFile: 'vm-winrm-windows/azuredeploy.parameters.json'
+          # Override parameters is done via secret variables in Azure DevOps Pipeline. Could also be done from the YAML file                                                                                                         
+          overrideParameters: '-adminUsername $(adminUser) -adminPassword $(adminPw) -dnsLabelPrefix "$(dnsNameForPublicIP)$(Build.BuildId)" -vmName $(vmName) -vhdStorageContainerName ${{ variables.storageContainerName }}'
+          deploymentMode: 'Incremental'
+
+- stage: Connect
+  displayName: Test connection
+  jobs:
+  - job: connect
+    steps:
+    - task: AzurePowerShell@5
+      name: 'SetEnvVars'
+      displayName: 'SetEnvironmentVariables'
+      inputs:
+        azureSubscription: # INSERT YOU SERVICE CONNECTION
+        ScriptType: 'InlineScript'
+        Inline: |
+
+          # Retrieve information about public DNS, storage account, and blob contents (VHD)
+          $dnsFQDN = (Get-AzPublicIpAddress -ResourceGroupName $(ResourceGroupName)).DnsSettings.Fqdn
+          $storageAccountName = (Get-AzStorageAccount -ResourceGroupName $(ResourceGroupName)).StorageAccountName
+          $context = (Get-AzStorageAccount -ResourceGroupName $(ResourceGroupName) -AccountName $storageAccountName).Context
+          $container = (Get-AzStorageContainer -Context $context)
+          $containerUri = (Get-AzStorageContainer -Context $context).CloudBlobContainer.Uri.AbsoluteUri
+          $sasStartTime = Get-Date
+          $sasEndTime = $sasStartTime.AddHours(1)
+
+          ### Generate SAS token for possible Download task
+          $sasToken = New-AzStorageContainerSAStoken -Name $(storageContainerName) -Context $context -Permission rwdl -StartTime $sasStartTime -ExpiryTime $sasEndTime
+          $concat = $containerUri + "/" + "$sasToken"
+
+          ### Set output variables to be used in later stages: $(azFQDN) & $(concat) ###
+          write-host "##vso[task.setvariable variable=azFQDN;isOutput=true]$dnsFQDN"
+          write-host "##vso[task.setvariable variable=azCopyVhd;isOutput=true]$concat"
+          
+
+          ### Set output variable to be used in same stage: $(storageAccount) ### 
+          write-host "##vso[task.setvariable variable=storageAccount]$storageAccountName" 
+        azurePowerShellVersion: 'LatestVersion'
+
+    - task: AzureFileCopy@4
+      displayName: 'AzureVMs File Copy'
+      inputs:
+        SourcePath: '$(Build.Repository.LocalPath)/fishtank'
+        azureSubscription: # INSERT YOU SERVICE CONNECTION
+        Destination: AzureVMs
+        storage: '$(storageAccount)'
+        resourceGroup: '$(ResourceGroupName)'
+        vmsAdminUserName: '$(adminUser)'
+        vmsAdminPassword: '$(adminPw)'
+        TargetPath: 'C:\Windows\System32\Sysprep'
+        enableCopyPrerequisites: true
+    
+    - task: AzurePowerShell@5
+      name: 'removeCSE'
+      displayName: 'Remove CSE'
+      inputs:
+        azureSubscription: # INSERT YOU SERVICE CONNECTION
+        ScriptType: 'InlineScript'
+        Inline: |
+
+          ### Remove Custom Script Extension ###
+          Remove-AzVMCustomScriptExtension -ResourceGroupName $(ResourceGroupName) -vmName $(vmName) -Name WinRMCustomScriptExtension -Force
+
+        azurePowerShellVersion: 'LatestVersion'
+
+    - task: AzurePowerShell@5
+      name: 'createTempContainer'
+      displayName: 'Create temporary container'
+      inputs:
+        azureSubscription: # INSERT YOU SERVICE CONNECTION
+        ScriptType: 'InlineScript'
+        Inline: |
+
+          $context = (Get-AzStorageAccount -ResourceGroupName $(ResourceGroupName) -AccountName $(storageAccount)).Context
+          $containerCount = (Get-AzStorageContainer -Context $context).Count
+
+          ### Create an extra container for CSE ###
+          $tmpcontainerName = "sysprep"
+
+          ### Write output variable to be used later ###
+          write-host "##vso[task.setvariable variable=tmpContainerName]$tmpContainerName"
+          
+          ### Check if container already exist ###
+          if ($containerCount -lt 2) {
+            $StorageAccountContext = (Get-AzStorageAccount -ResourceGroupName $(ResourceGroupName) -Name $(storageAccount)).Context
+            new-AzStoragecontainer `
+              -Name $tmpcontainerName `
+              -Context $StorageAccountContext `
+              -Permission blob
+
+            ### Upload script to Container ###
+            Set-AzStorageBlobContent `
+              -File $(Build.Repository.LocalPath)/fishtank/sysPrepvm.ps1 `
+              -Container $tmpcontainerName `
+              -Blob sysPrepvm.ps1 `
+              -Context $StorageAccountContext
+
+            } else {
+                write-host "Container already exists"
+            }
+        azurePowerShellVersion: 'LatestVersion'
+
+    - task: AzurePowerShell@5
+      name: 'setCSE'
+      displayName: 'Create Custom script Extension'
+      inputs:
+        azureSubscription: # INSERT YOU SERVICE CONNECTION
+        ScriptType: 'InlineScript'
+        Inline: |
+
+          ### Get Storage Account Key
+          $storageAccountKey = (Get-AzStorageAccountKey -ResourceGroupName $(ResourceGroupName) -AccountName $(storageAccount)).Item(0).Value
+
+          ## Create New Custom Script Extension ###
+          Set-AzVMCustomScriptExtension `
+            -ResourceGroupName $(ResourceGroupName) `
+            -vmName $(vmName) `
+            -Name 'sysPrep' `
+            -StorageAccountName $(storageAccount) `
+            -StorageAccountKey $storageAccountKey `
+            -ContainerName $(tmpcontainerName) `
+            -FileName sysPrepvm.ps1 `
+            -Location ${{ variables.location }}
+
+        azurePowerShellVersion: 'LatestVersion'

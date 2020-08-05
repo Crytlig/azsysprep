@@ -1,0 +1,97 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "adminUsername": {
+            "value": "yourusername"
+        },
+        "adminPassword": {
+            "value": "GEN-PASSWORD"
+        },
+        "vhdStorageContainerName": {
+            "value": "vhds"
+        },
+        "windowsOSVersion": {
+            "value": "2016-Datacenter-smalldisk"
+        },
+        "dnsLabelPrefix": {
+            "value": "GEN-UNIQUE-13"
+        },
+        "vmName": {
+            "value": "VMSysPrep"
+        },
+        "nicName": {
+            "value": "VMSysPrepNic"
+        },
+        "virtualNetworkName": {
+            "value": "VMSysPrepVNET"
+        },
+        "publicIPAddressName": {
+            "value": "VMSysPrepPublicIP"
+        },
+        "subnetName": {
+            "value": "VMSysPrepSubnet"
+        },
+        "networkSecurityGroupRules": {
+            "value": [
+                {
+                    "name": "WinRMhttps",
+                    "properties": {
+                        "description": "Allows PowerShell remote on HTTPS",
+                        "protocol": "TCP",
+                        "sourcePortRange": "*",
+                        "destinationPortRange": "5986",
+                        "sourceAddressPrefix": "*",
+                        "destinationAddressPrefix": "*",
+                        "access": "Allow",
+                        "priority": 100,
+                        "direction": "Inbound",
+                        "sourcePortRanges": [],
+                        "destinationPortRanges": [],
+                        "sourceAddressPrefixes": [],
+                        "destinationAddressPrefixes": []
+                    }
+                },
+                {
+                    "name": "RDP",
+                    "properties": {
+                        "priority": 300,
+                        "protocol": "TCP",
+                        "access": "Allow",
+                        "direction": "Inbound",
+                        "sourceAddressPrefix": "*",
+                        "sourcePortRange": "*",
+                        "destinationAddressPrefix": "*",
+                        "destinationPortRange": "3389"
+                    }
+                },
+                {
+                    "name": "HTTP",
+                    "properties": {
+                        "priority": 320,
+                        "protocol": "TCP",
+                        "access": "Allow",
+                        "direction": "Inbound",
+                        "sourceAddressPrefix": "*",
+                        "sourcePortRange": "*",
+                        "destinationAddressPrefix": "*",
+                        "destinationPortRange": "80"
+                    }
+                },
+                {
+                    "name": "HTTPS",
+                    "properties": {
+                        "priority": 340,
+                        "protocol": "TCP",
+                        "access": "Allow",
+                        "direction": "Inbound",
+                        "sourceAddressPrefix": "*",
+                        "sourcePortRange": "*",
+                        "destinationAddressPrefix": "*",
+                        "destinationPortRange": "443"
+                    }
+                }
+            ]
+        }
+    }
+}
