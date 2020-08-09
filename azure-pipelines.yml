@@ -7,8 +7,8 @@ pool:
 variables:
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
-  location: "'East Us'"
-  storageContainerName: "vhds"
+  location: 'East Us'
+  storageContainerName: 'vhds'
 
 stages:
 - stage: BuildRg
@@ -19,7 +19,7 @@ stages:
       - task: AzureResourceManagerTemplateDeployment@3
         inputs:
           deploymentScope: 'Resource Group'
-          azureResourceManagerConnection: # INSERT YOU SERVICE CONNECTION
+          azureResourceManagerConnection: # INSERT YOUR SERVICE CONNECTION
           subscriptionId: # INSERT SUBSCRIPTION ID
           action: 'Create Or Update Resource Group'
           resourceGroupName: # INSERT RESOURCEGROUP NAME
@@ -40,7 +40,7 @@ stages:
       name: 'SetEnvVars'
       displayName: 'SetEnvironmentVariables'
       inputs:
-        azureSubscription: # INSERT YOU SERVICE CONNECTION
+        azureSubscription: # INSERT YOUR SERVICE CONNECTION
         ScriptType: 'InlineScript'
         Inline: |
 
@@ -70,7 +70,7 @@ stages:
       displayName: 'AzureVMs File Copy'
       inputs:
         SourcePath: '$(Build.Repository.LocalPath)/fishtank'
-        azureSubscription: # INSERT YOU SERVICE CONNECTION
+        azureSubscription: # INSERT YOUR SERVICE CONNECTION
         Destination: AzureVMs
         storage: '$(storageAccount)'
         resourceGroup: '$(ResourceGroupName)'
@@ -83,7 +83,7 @@ stages:
       name: 'removeCSE'
       displayName: 'Remove CSE'
       inputs:
-        azureSubscription: # INSERT YOU SERVICE CONNECTION
+        azureSubscription: # INSERT YOUR SERVICE CONNECTION
         ScriptType: 'InlineScript'
         Inline: |
 
@@ -96,7 +96,7 @@ stages:
       name: 'createTempContainer'
       displayName: 'Create temporary container'
       inputs:
-        azureSubscription: # INSERT YOU SERVICE CONNECTION
+        azureSubscription: # INSERT YOUR SERVICE CONNECTION
         ScriptType: 'InlineScript'
         Inline: |
 
@@ -133,7 +133,7 @@ stages:
       name: 'setCSE'
       displayName: 'Create Custom script Extension'
       inputs:
-        azureSubscription: # INSERT YOU SERVICE CONNECTION
+        azureSubscription: # INSERT YOUR SERVICE CONNECTION
         ScriptType: 'InlineScript'
         Inline: |
 
